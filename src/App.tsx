@@ -40,6 +40,8 @@ import {
   useState,
 } from "react";
 import homeHeroImage from "./assets/home-hero.png";
+import homePromptPreview from "./assets/home-prompt-preview.png";
+import homeStudioPreview from "./assets/home-studio-preview.png";
 
 type ImageProtocol =
   | "custom-openai"
@@ -4021,18 +4023,31 @@ function AdminStatCard({
 function HomePage({ onEnter, onAdmin }: { onEnter: () => void; onAdmin: () => void }) {
   const featureBands = [
     {
-      title: "批量生成，不打断思路",
-      body: "提示词提交后立即进入队列，成功、失败、耗时和尺寸会沉到本地记录里，适合连续探索一组视觉方向。",
+      title: "统一记录流",
+      body: "所有生成任务按时间自然归档，最新作品永远在最前。灵感、失败、重试和成片不再散落在不同页面。",
     },
     {
-      title: "只走指定服务地址",
-      body: "前端只允许在太极 AI 与 BobDong 两个服务地址之间选择，避免临时填错请求入口。",
+      title: "发送前智能分析",
+      body: "在真正消耗生图额度前，先检查提示词风险、参数匹配度和可能失败的环节，再把建议交还给创作者决定。",
     },
     {
-      title: "浏览器本地历史",
-      body: "图片 Blob、提示词、模型、宽高比和错误详情写入 IndexedDB，服务器不保存生成结果。",
+      title: "本地图库资产",
+      body: "图片、参数、提示词和错误详情保存在当前浏览器本地。作品属于你的工作台，不被服务端额外留存。",
     },
   ];
+  const metrics = [
+    { value: "20/页", label: "按需懒加载" },
+    { value: "并行队列", label: "生成中继续提交" },
+    { value: "本地优先", label: "IndexedDB 保存" },
+  ];
+  const detailItems = [
+    "提示词优化、风格增强、失败预判和参数推荐被收进同一个发送流程。",
+    "左右侧栏可收起，主画布为图片记录让出更多空间。",
+    "多选、全选已显示、反选、批量下载和清除失败，让图库管理更接近专业素材库。",
+  ];
+  const scrollToSection = (sectionId: string) => {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <main className="home-page">
@@ -4049,37 +4064,61 @@ function HomePage({ onEnter, onAdmin }: { onEnter: () => void; onAdmin: () => vo
             </span>
             <strong>Image Studio</strong>
           </div>
-          <button type="button" className="home-nav-action" onClick={onEnter}>
-            打开工作台
-          </button>
-          <button type="button" className="home-admin-link" onClick={onAdmin}>
-            <ShieldCheck size={16} />
-            管理后台
-          </button>
+          <div className="home-nav-links" aria-label="首页导航">
+            <button type="button" onClick={() => scrollToSection("home-product")}>
+              工作台
+            </button>
+            <button type="button" onClick={() => scrollToSection("home-analysis")}>
+              智能分析
+            </button>
+            <button type="button" onClick={() => scrollToSection("home-local")}>
+              本地优先
+            </button>
+          </div>
+          <div className="home-nav-actions">
+            <button type="button" className="home-nav-action" onClick={onEnter}>
+              打开工作台
+            </button>
+            <button type="button" className="home-admin-link" onClick={onAdmin}>
+              <ShieldCheck size={16} />
+              管理后台
+            </button>
+          </div>
         </nav>
 
         <div className="home-hero-copy">
-          <span className="home-kicker">Local-first batch image generation</span>
+          <span className="home-kicker">AI image workspace</span>
           <h1>Image Studio</h1>
           <p>
-            一个面向创作者的本地批量生图工作台，把模型选择、参考图、宽高比、并发队列和历史图片收进同一个安静而快速的界面。
+            从一句提示词，到一组可复用的视觉资产。把智能分析、批量生成、并行队列和本地图库，放进一个安静、清晰、反应迅速的创作空间。
           </p>
           <div className="home-hero-actions">
             <button type="button" className="home-primary" onClick={onEnter}>
               开始生成
               <ArrowRight size={18} />
             </button>
-            <a className="home-secondary" href="#home-flow">
+            <button type="button" className="home-secondary" onClick={() => scrollToSection("home-flow")}>
               了解流程
-            </a>
+            </button>
+          </div>
+          <div className="home-metric-row" aria-label="产品能力摘要">
+            {metrics.map((metric) => (
+              <div className="home-metric" key={metric.label}>
+                <strong>{metric.value}</strong>
+                <span>{metric.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       <section className="home-flow" id="home-flow">
         <div className="home-section-copy">
-          <span className="home-kicker">How it works</span>
-          <h2>从提示词到图库，保持一条清晰的线。</h2>
+          <span className="home-kicker">Built for creation</span>
+          <h2>一个屏幕，完成从构思到归档。</h2>
+          <p>
+            首页不再只是入口，而是产品能力的缩影：先让用户看到真实工作台，再用更少的文字说明它为什么值得信任。
+          </p>
         </div>
         <div className="home-feature-grid">
           {featureBands.map((feature) => (
@@ -4091,16 +4130,50 @@ function HomePage({ onEnter, onAdmin }: { onEnter: () => void; onAdmin: () => vo
         </div>
       </section>
 
-      <section className="home-insight">
+      <section className="home-product-showcase" id="home-product">
+        <div className="home-showcase-copy">
+          <span className="home-kicker">Studio overview</span>
+          <h2>让生成记录，成为可以继续工作的画布。</h2>
+          <p>
+            中间区域统一展示全部生成记录，左侧保留最近记录入口，右侧承载配置。用户可以在生成中继续提交新批次，让探索过程保持连续。
+          </p>
+        </div>
+        <figure className="home-preview-frame home-preview-frame-wide">
+          <img src={homeStudioPreview} alt="Image Studio 工作台截图，展示生成记录流、左侧历史和右侧配置面板" />
+        </figure>
+      </section>
+
+      <section className="home-analysis-showcase" id="home-analysis">
+        <div className="home-analysis-media">
+          <img src={homePromptPreview} alt="Image Studio 提示词输入和预设提示词截图" />
+        </div>
+        <div className="home-showcase-copy">
+          <span className="home-kicker">Prompt intelligence</span>
+          <h2>发送之前，先把想法打磨到更接近成片。</h2>
+          <p>
+            默认开启自动优化。系统会在提交前分析提示词、推荐参数、预判失败原因，并把风格增强建议收束成可执行的生成方案。
+          </p>
+          <ul className="home-detail-list">
+            {detailItems.map((item) => (
+              <li key={item}>
+                <CheckCircle2 size={17} />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <section className="home-insight" id="home-local">
         <div>
-          <span className="home-kicker">Designed for iteration</span>
-          <h2>每一次提交都会成为可回看的素材资产。</h2>
+          <span className="home-kicker">Private by design</span>
+          <h2>作品留在本地。创作更安心。</h2>
         </div>
         <p>
-          工作台默认展示所有本地生成记录，失败也会保留完整错误内容，方便你判断是提示词、模型、网络还是服务端响应出了问题。
+          生成图片和历史仅保存到当前浏览器本地，服务端只做无状态协议转发。你可以批量下载、清理失败记录，也可以在下一次打开时继续查看自己的素材库。
         </p>
         <button type="button" className="home-primary dark" onClick={onEnter}>
-          进入使用界面
+          进入工作台
           <ArrowRight size={18} />
         </button>
       </section>
