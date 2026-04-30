@@ -912,6 +912,29 @@ async function deleteHistoryRecord(id: string) {
   });
 }
 
+async function deleteFailedHistoryRecords() {
+  const db = await openDb();
+  return new Promise<string[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const deletedIds: string[] = [];
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const record = cursor.value as StoredHistoryRecord;
+      if (record.status === "error") {
+        deletedIds.push(record.id);
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve(deletedIds);
+    tx.onerror = () => reject(tx.error);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function clearHistoryRecords() {
   const db = await openDb();
   return new Promise<void>((resolve, reject) => {
@@ -1608,6 +1631,9 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(() =>
     loadBooleanSetting("imageStudioSettingsOpen", window.innerWidth > 1180),
   );
+  const [isAutoPromptAnalysisEnabled, setIsAutoPromptAnalysisEnabled] = useState(() =>
+    loadBooleanSetting("imageStudioAutoPromptAnalysisEnabled", true),
+  );
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(() => new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
@@ -1617,7 +1643,6 @@ export default function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isAutoLoadingModels, setIsAutoLoadingModels] = useState(false);
   const [showPromptPresets, setShowPromptPresets] = useState(false);
-  const [isPromptFocused, setIsPromptFocused] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
   const [isSendLaunching, setIsSendLaunching] = useState(false);
   const [analysisState, setAnalysisState] = useState<PromptAnalysisState>({
@@ -1692,7 +1717,7 @@ export default function App() {
   );
   const referenceIssueCount = referenceImages.filter((image) => image.status === "error").length;
   const referenceWarningCount = referenceImages.filter((image) => image.status === "warning").length;
-  const showPromptGroupHint = isPromptFocused || prompt.trim().length > 0;
+  const failedVisibleRecordCount = visibleStats.error;
   const isPromptAnalyzing = analysisState.status === "analyzing";
   const currentAnalysisMessage = ANALYSIS_STEPS[analysisStepIndex % ANALYSIS_STEPS.length];
   const canGenerate =
@@ -1794,6 +1819,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("imageStudioSettingsOpen", String(isSettingsOpen));
   }, [isSettingsOpen]);
+
+  useEffect(() => {
+    localStorage.setItem("imageStudioAutoPromptAnalysisEnabled", String(isAutoPromptAnalysisEnabled));
+    if (!isAutoPromptAnalysisEnabled && analysisState.mode === "send") {
+      setAnalysisState({ status: "idle", mode: "send", message: "" });
+    }
+  }, [isAutoPromptAnalysisEnabled, analysisState.mode]);
 
   useEffect(() => {
     if (isAspectRatioSupported(apiConfig.protocol, params.aspectRatio)) return;
@@ -2117,6 +2149,39 @@ export default function App() {
     setIsSelectionMode(false);
     setPendingDeleteIds(null);
     setHighlightedRecordId((current) => (deleteIdSet.has(current) ? "" : current));
+  }
+
+  async function clearFailedRecords() {
+    const storedFailedIds = await deleteFailedHistoryRecords();
+    const failedIds = new Set(storedFailedIds);
+    visibleRecords.forEach((record) => {
+      if (record.status === "error") failedIds.add(record.id);
+    });
+    sidebarRecords.forEach((record) => {
+      if (record.status === "error") failedIds.add(record.id);
+    });
+    if (failedIds.size === 0) return;
+
+    setSidebarRecords((current) => {
+      current.forEach((record) => {
+        if (failedIds.has(record.id) && record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      });
+      return current.filter((record) => !failedIds.has(record.id) && record.status !== "error");
+    });
+    setVisibleRecords((current) => {
+      current.forEach((record) => {
+        if ((failedIds.has(record.id) || record.status === "error") && record.imageUrl) {
+          URL.revokeObjectURL(record.imageUrl);
+        }
+      });
+      return current.filter((record) => !failedIds.has(record.id) && record.status !== "error");
+    });
+    setSelectedRecordIds((current) => {
+      const next = new Set(current);
+      failedIds.forEach((id) => next.delete(id));
+      return next;
+    });
+    setHighlightedRecordId((current) => (failedIds.has(current) ? "" : current));
   }
 
   async function handleFiles(files: FileList | File[]) {
@@ -2560,6 +2625,11 @@ export default function App() {
     startIntentRef.current = nextStart;
     const submittedPrompt = prompt.trim();
     triggerSendLaunchAnimation();
+    if (!isAutoPromptAnalysisEnabled) {
+      setAnalysisState({ status: "idle", mode: "send", message: "" });
+      void startBatch(undefined, { promptOverride: submittedPrompt });
+      return;
+    }
     void analyzeBeforeGenerate(submittedPrompt);
   }
 
@@ -2918,8 +2988,10 @@ export default function App() {
                       selectedCount={selectedRecords.length}
                       downloadableCount={downloadableSelectedRecords.length}
                       selectableCount={selectableVisibleRecords.length}
+                      failedCount={failedVisibleRecordCount}
                       isDownloading={isBulkDownloading}
                       onSelectAll={selectAllVisibleRecords}
+                      onClearFailed={() => void clearFailedRecords()}
                       onInvert={invertVisibleSelection}
                       onDownload={() => void downloadSelectedRecords()}
                       onDelete={requestBulkDelete}
@@ -3202,8 +3274,6 @@ export default function App() {
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               onInput={resizePromptTextarea}
-              onFocus={() => setIsPromptFocused(true)}
-              onBlur={() => setIsPromptFocused(false)}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
                   event.preventDefault();
@@ -3256,14 +3326,6 @@ export default function App() {
               风格增强
             </button>
           </div>
-          {showPromptGroupHint && (
-            <div className="prompt-group-hint" role="note">
-              <WandSparkles size={14} />
-              <span>
-                推荐使用 <strong>banana Pro 官转</strong> 或 <strong>OpenRouter</strong> 分组。
-              </span>
-            </div>
-          )}
           <div className="composer-meta">
             <span className={referenceIssueCount > 0 ? "has-error" : referenceWarningCount > 0 ? "has-warning" : ""}>
               {referenceImages.length > 0
@@ -3338,6 +3400,12 @@ export default function App() {
               spellCheck={false}
             />
           </label>
+          <div className="prompt-group-hint api-key-hint" role="note">
+            <WandSparkles size={14} />
+            <span>
+              推荐使用 <strong>banana Pro 官转</strong> 或 <strong>OpenRouter</strong> 分组。
+            </span>
+          </div>
           <label className="check-row">
             <input
               type="checkbox"
@@ -3345,6 +3413,14 @@ export default function App() {
               onChange={(event) => setApiConfig((current) => ({ ...current, rememberKey: event.target.checked }))}
             />
             <span>记住 API Key</span>
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={isAutoPromptAnalysisEnabled}
+              onChange={(event) => setIsAutoPromptAnalysisEnabled(event.target.checked)}
+            />
+            <span>发送前自动优化提示词</span>
           </label>
           <button className="primary-action" type="button" onClick={() => void loadModels()} disabled={modelState.status === "loading"}>
             {modelState.status === "loading" ? <Loader2 size={17} className="spin" /> : <RefreshCw size={17} />}
@@ -3381,7 +3457,9 @@ export default function App() {
           <div className={`status-line ${analysisModels.length > 0 ? "ready" : "idle"}`}>
             {analysisModels.length > 0 ? <ShieldCheck size={15} /> : <AlertCircle size={15} />}
             <span>
-              {analysisModels.length > 0
+              {!isAutoPromptAnalysisEnabled
+                ? "已关闭发送前自动优化，点击发送会直接进入生图队列"
+                : analysisModels.length > 0
                 ? `发送前使用 ${preferredAnalysisModel} 做提示词优化、参数推荐和失败预判`
                 : "没有 GPT 文本模型时，会先使用本地规则预检"}
             </span>
@@ -4379,8 +4457,10 @@ function BulkActionBar({
   selectedCount,
   downloadableCount,
   selectableCount,
+  failedCount,
   isDownloading,
   onSelectAll,
+  onClearFailed,
   onInvert,
   onDownload,
   onDelete,
@@ -4389,8 +4469,10 @@ function BulkActionBar({
   selectedCount: number;
   downloadableCount: number;
   selectableCount: number;
+  failedCount: number;
   isDownloading: boolean;
   onSelectAll: () => void;
+  onClearFailed: () => void;
   onInvert: () => void;
   onDownload: () => void;
   onDelete: () => void;
@@ -4401,6 +4483,10 @@ function BulkActionBar({
       <strong>已选 {selectedCount} / 可选 {selectableCount}</strong>
       <button type="button" className="subtle-button" onClick={onSelectAll} disabled={selectableCount === 0}>
         全选已显示
+      </button>
+      <button type="button" className="subtle-button danger" onClick={onClearFailed} disabled={failedCount === 0}>
+        <Trash2 size={16} />
+        清除失败 {failedCount || ""}
       </button>
       <button type="button" className="subtle-button" onClick={onInvert} disabled={selectableCount === 0}>
         反选

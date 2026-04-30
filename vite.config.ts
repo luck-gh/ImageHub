@@ -7,7 +7,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { defineConfig, type PluginOption, type ViteDevServer } from "vite";
@@ -118,8 +118,41 @@ const SESSION_COOKIE = "image_studio_admin_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 const DATA_DIR = join(process.cwd(), ".data");
 const ADMIN_STORE_PATH = join(DATA_DIR, "admin-store.json");
-const FRONTEND_BUILD_VERSION = process.env.FRONTEND_BUILD_VERSION ||
-  new Date().toISOString().replace(/\D/g, "").slice(0, 14);
+const FRONTEND_VERSION_PATHS = ["src", "index.html", "package.json", "vite.config.ts"];
+
+function formatFrontendVersion(value: number) {
+  const date = new Date(value);
+  const pad = (item: number, length = 2) => String(item).padStart(length, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+    pad(date.getMilliseconds(), 3),
+  ].join("");
+}
+
+function latestModifiedAt(path: string): number {
+  if (!existsSync(path)) return 0;
+  const stat = statSync(path);
+  if (!stat.isDirectory()) return stat.mtimeMs;
+  return readdirSync(path)
+    .filter((item) => !item.startsWith("."))
+    .reduce((latest, item) => Math.max(latest, latestModifiedAt(join(path, item))), stat.mtimeMs);
+}
+
+function createFrontendBuildVersion() {
+  if (process.env.FRONTEND_BUILD_VERSION) return process.env.FRONTEND_BUILD_VERSION;
+  const latest = FRONTEND_VERSION_PATHS.reduce(
+    (maxTime, path) => Math.max(maxTime, latestModifiedAt(join(process.cwd(), path))),
+    0,
+  );
+  return formatFrontendVersion(latest || Date.now());
+}
+
+const FRONTEND_BUILD_VERSION = createFrontendBuildVersion();
 const FRONTEND_BUILD_INFO = {
   version: FRONTEND_BUILD_VERSION,
   builtAt: new Date().toISOString(),

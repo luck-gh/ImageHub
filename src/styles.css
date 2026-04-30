@@ -2252,6 +2252,12 @@ textarea:focus-visible {
   font-weight: 820;
 }
 
+.api-key-hint {
+  width: 100%;
+  margin: 0;
+  justify-content: flex-start;
+}
+
 .send-button {
   position: relative;
   overflow: visible;
