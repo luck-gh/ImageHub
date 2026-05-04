@@ -79,6 +79,15 @@ type ImageParams = {
   negativePrompt: string;
 };
 
+type SubmittedReference = {
+  name: string;
+  type: string;
+  dataUrl: string;
+  originalBytes: number;
+  requestBytes: number;
+  compressed: boolean;
+};
+
 type ReferenceStatus = "ready" | "warning" | "error";
 
 type UploadedReference = {
@@ -126,6 +135,7 @@ type Job = {
   promptVariant?: PromptVariant;
   attempt?: number;
   maxAttempts?: number;
+  submittedReferenceImages?: SubmittedReference[];
 };
 
 type StoredHistoryRecord = {
@@ -139,6 +149,7 @@ type StoredHistoryRecord = {
   model: string;
   params: ImageParams;
   referenceImages?: UploadedReference[];
+  submittedReferenceImages?: SubmittedReference[];
   status: "success" | "error";
   createdAt: number;
   startedAt?: number;
@@ -348,6 +359,7 @@ type PreviewItem = {
   agentName?: string;
   agentScenario?: string;
   promptVariant?: PromptVariant;
+  submittedReferenceImages?: SubmittedReference[];
 };
 
 type AppPage = "home" | "studio" | "admin";
@@ -3701,6 +3713,8 @@ export default function App() {
       };
     }
 
+    let submittedRefSnapshot: SubmittedReference[] = [];
+
     try {
       let requestReferenceImages: Awaited<ReturnType<typeof referenceImagesForRequest>> = [];
       if (protocolSupportsRefs && userRefsCount > 0) {
@@ -3709,6 +3723,14 @@ export default function App() {
           name: image.name,
           type: image.type,
           dataUrl: image.dataUrl,
+        }));
+        submittedRefSnapshot = prepared.map((image) => ({
+          name: image.name,
+          type: image.type,
+          dataUrl: image.dataUrl,
+          originalBytes: image.originalBytes,
+          requestBytes: image.requestBytes,
+          compressed: image.compressed,
         }));
         preparedSummary = {
           hasReferences: true,
@@ -3723,6 +3745,7 @@ export default function App() {
             compressed: image.compressed,
           })),
         };
+        patchVisibleRecord(job.id, { submittedReferenceImages: submittedRefSnapshot });
       }
       requestParamsForLog = {
         ...requestParamsForLog,
@@ -3833,6 +3856,7 @@ export default function App() {
         model: job.model,
         params: job.params,
         referenceImages: referenceImagesForHistory(job.referenceImages),
+        submittedReferenceImages: submittedRefSnapshot.length > 0 ? submittedRefSnapshot : undefined,
         status: "success",
         createdAt: job.createdAt,
         startedAt,
@@ -3935,6 +3959,7 @@ export default function App() {
         model: job.model,
         params: job.params,
         referenceImages: referenceImagesForHistory(job.referenceImages),
+        submittedReferenceImages: submittedRefSnapshot.length > 0 ? submittedRefSnapshot : undefined,
         status: "error",
         createdAt: job.createdAt,
         startedAt,
@@ -4747,6 +4772,7 @@ export default function App() {
       agentName: item.agentName,
       agentScenario: item.agentScenario,
       promptVariant: item.promptVariant,
+      submittedReferenceImages: item.submittedReferenceImages,
     });
   }
 
@@ -7430,6 +7456,32 @@ function ImagePreviewModal({
             <div className="preview-agent-meta">
               <span>{item.agentName}</span>
               <small>{item.promptVariant ? PROMPT_VARIANT_LABELS[item.promptVariant] : "Agent"}</small>
+            </div>
+          )}
+          {item.submittedReferenceImages && item.submittedReferenceImages.length > 0 && (
+            <div className="preview-submitted-refs">
+              <div className="preview-submitted-refs-head">
+                <strong>提交的参考图</strong>
+                <small>压缩后 · 实际发送给上游的版本</small>
+              </div>
+              <div className="preview-submitted-refs-grid">
+                {item.submittedReferenceImages.map((ref, index) => (
+                  <a
+                    key={`${ref.name}-${index}`}
+                    className="preview-submitted-ref"
+                    href={ref.dataUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`${ref.name} · ${formatBytes(ref.requestBytes)}${ref.compressed ? `（原 ${formatBytes(ref.originalBytes)}）` : ""}`}
+                  >
+                    <img src={ref.dataUrl} alt={ref.name} />
+                    <span>
+                      <strong>#{index + 1}</strong>
+                      <small>{formatBytes(ref.requestBytes)}{ref.compressed ? ` · 压缩自 ${formatBytes(ref.originalBytes)}` : " · 原图"}</small>
+                    </span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
           {!hasImage && (
