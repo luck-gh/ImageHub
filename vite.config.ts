@@ -1226,6 +1226,32 @@ const SIZE_BY_RATIO: Record<string, string> = {
   "9:21": "864x2016",
 };
 
+const PRO_2K_SIZE_BY_RATIO: Record<string, string> = {
+  "1:1": "2048x2048",
+  "4:5": "2048x2560",
+  "5:4": "2560x2048",
+  "3:4": "2304x3072",
+  "4:3": "3072x2304",
+  "2:3": "2048x3072",
+  "3:2": "3072x2048",
+  "9:16": "2160x3840",
+  "16:9": "3840x2160",
+  "21:9": "3840x1646",
+};
+
+const PRO_4K_SIZE_BY_RATIO: Record<string, string> = {
+  "1:1": "3840x3840",
+  "4:5": "3072x3840",
+  "5:4": "3840x3072",
+  "3:4": "2880x3840",
+  "4:3": "3840x2880",
+  "2:3": "2560x3840",
+  "3:2": "3840x2560",
+  "9:16": "2160x3840",
+  "16:9": "3840x2160",
+  "21:9": "3840x1646",
+};
+
 const RESOLUTION_MULTIPLIER: Record<string, number> = {
   "1K": 1,
   "2K": 2,
@@ -1255,6 +1281,12 @@ function scaleSize(size: string, resolution = "1K") {
 
 function imageSizeForProtocol(request: GenerateRequest, protocol: ImageProtocol) {
   if (isGptImage2Model(request.model) && !isGptImage2ProModel(request.model) && request.aspectRatio) {
+    return SIZE_BY_RATIO[request.aspectRatio] || SIZE_BY_RATIO["1:1"];
+  }
+  if (isGptImage2ProModel(request.model) && request.aspectRatio) {
+    const res = normalizeResolution(request.resolution);
+    if (res === "4K") return PRO_4K_SIZE_BY_RATIO[request.aspectRatio] || PRO_4K_SIZE_BY_RATIO["1:1"];
+    if (res === "2K") return PRO_2K_SIZE_BY_RATIO[request.aspectRatio] || PRO_2K_SIZE_BY_RATIO["1:1"];
     return SIZE_BY_RATIO[request.aspectRatio] || SIZE_BY_RATIO["1:1"];
   }
   return request.aspectRatio

@@ -707,6 +707,32 @@ const SIZE_BY_RATIO: Record<string, string> = {
   "1:8": "256x2048",
 };
 
+const PRO_2K_SIZE_BY_RATIO: Record<string, string> = {
+  "1:1": "2048x2048",
+  "4:5": "2048x2560",
+  "5:4": "2560x2048",
+  "3:4": "2304x3072",
+  "4:3": "3072x2304",
+  "2:3": "2048x3072",
+  "3:2": "3072x2048",
+  "9:16": "2160x3840",
+  "16:9": "3840x2160",
+  "21:9": "3840x1646",
+};
+
+const PRO_4K_SIZE_BY_RATIO: Record<string, string> = {
+  "1:1": "3840x3840",
+  "4:5": "3072x3840",
+  "5:4": "3840x3072",
+  "3:4": "2880x3840",
+  "4:3": "3840x2880",
+  "2:3": "2560x3840",
+  "3:2": "3840x2560",
+  "9:16": "2160x3840",
+  "16:9": "3840x2160",
+  "21:9": "3840x1646",
+};
+
 const GEMINI_3_PRO_SIZE_BY_RATIO: Record<string, string> = {
   "1:1": "1024x1024",
   "2:3": "832x1248",
@@ -1738,6 +1764,12 @@ function resolveRequestSize(
 ) {
   const baseSize = baseSizeForModel(aspectRatio, protocol, model);
   if (usesOfficialGptImageSizing(protocol, model)) return baseSize;
+  if (isGptImage2ProModel(model)) {
+    const res = safeImageResolution(resolution);
+    if (res === "4K") return PRO_4K_SIZE_BY_RATIO[aspectRatio] || PRO_4K_SIZE_BY_RATIO["1:1"];
+    if (res === "2K") return PRO_2K_SIZE_BY_RATIO[aspectRatio] || PRO_2K_SIZE_BY_RATIO["1:1"];
+    return baseSize;
+  }
   return scaleSize(baseSize, safeImageResolution(resolution));
 }
 
