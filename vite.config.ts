@@ -1241,7 +1241,16 @@ function scaleSize(size: string, resolution = "1K") {
   if (multiplier === 1) return size;
   const [width, height] = size.split("x").map((item) => Number(item));
   if (!Number.isFinite(width) || !Number.isFinite(height)) return size;
-  return `${Math.round(width * multiplier)}x${Math.round(height * multiplier)}`;
+  const MAX_EDGE = 3840;
+  let w = Math.round(width * multiplier);
+  let h = Math.round(height * multiplier);
+  const longest = Math.max(w, h);
+  if (longest > MAX_EDGE) {
+    const factor = MAX_EDGE / longest;
+    w = Math.round(width * multiplier * factor);
+    h = Math.round(height * multiplier * factor);
+  }
+  return `${w}x${h}`;
 }
 
 function imageSizeForProtocol(request: GenerateRequest, protocol: ImageProtocol) {

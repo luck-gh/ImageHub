@@ -1706,7 +1706,16 @@ function scaleSize(size: string, resolution: ImageResolution) {
   const [width, height] = size.split("x").map((item) => Number(item));
   const multiplier = IMAGE_RESOLUTIONS.find((item) => item.value === resolution)?.multiplier || 1;
   if (!Number.isFinite(width) || !Number.isFinite(height) || multiplier === 1) return size;
-  return `${Math.round(width * multiplier)}x${Math.round(height * multiplier)}`;
+  const MAX_EDGE = 3840;
+  let w = Math.round(width * multiplier);
+  let h = Math.round(height * multiplier);
+  const longest = Math.max(w, h);
+  if (longest > MAX_EDGE) {
+    const factor = MAX_EDGE / longest;
+    w = Math.round(width * multiplier * factor);
+    h = Math.round(height * multiplier * factor);
+  }
+  return `${w}x${h}`;
 }
 
 function baseSizeForModel(aspectRatio: string, protocol: ImageProtocol, model = "") {
