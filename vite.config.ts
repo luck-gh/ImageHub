@@ -261,6 +261,7 @@ const API_TIMEOUT_MS = 300_000;
 const MAX_REQUEST_BYTES = 60 * 1024 * 1024;
 const DEFAULT_PROTOCOL: ImageProtocol = "custom-openai";
 const GPT_IMAGE_2_MODEL = "gpt-image-2";
+const GPT_IMAGE_2_PRO_MODEL = "gpt-image-2-pro";
 const GPT_IMAGE_2_FAMILY_MODEL = "gpt-5.4-image-2";
 const GEMINI_3_PRO_IMAGE_MODEL = "gemini-3-pro-image-preview";
 const GEMINI_NATIVE_API_PREFIX = "/v1beta";
@@ -343,8 +344,8 @@ const FRONTEND_BUILD_INFO = {
 const adminSessions = new Map<string, { username: string; expiresAt: number }>();
 
 const DEFAULT_MODELS: Record<ImageProtocol, string[]> = {
-  "custom-openai": [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
-  "openai-images": [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
+  "custom-openai": [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_PRO_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
+  "openai-images": [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_PRO_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
   "openai-responses": ["gpt-4.1", "gpt-4.1-mini"],
   "gemini-native": [GEMINI_3_PRO_IMAGE_MODEL, "gemini-2.5-flash-image", "gemini-2.0-flash-preview-image-generation"],
   "gemini-openai": ["gemini-2.5-flash-image"],
@@ -1244,7 +1245,7 @@ function scaleSize(size: string, resolution = "1K") {
 }
 
 function imageSizeForProtocol(request: GenerateRequest, protocol: ImageProtocol) {
-  if (isGptImage2Model(request.model) && request.aspectRatio) {
+  if (isGptImage2Model(request.model) && !isGptImage2ProModel(request.model) && request.aspectRatio) {
     return SIZE_BY_RATIO[request.aspectRatio] || SIZE_BY_RATIO["1:1"];
   }
   return request.aspectRatio
@@ -1252,20 +1253,21 @@ function imageSizeForProtocol(request: GenerateRequest, protocol: ImageProtocol)
     : request.size || "auto";
 }
 
+function normalizedModelId(model = "") {
+  return model.replace(/^models\//, "").trim().toLowerCase();
+}
+
 function isGptImage2Model(model = "") {
-  const normalized = model.toLowerCase();
+  const normalized = normalizedModelId(model);
   return normalized === GPT_IMAGE_2_MODEL || normalized === GPT_IMAGE_2_FAMILY_MODEL || normalized.includes("image-2");
 }
 
-function isGemini3ProImageModel(model = "") {
-  return modelName(model).toLowerCase() === GEMINI_3_PRO_IMAGE_MODEL;
+function isGptImage2ProModel(model = "") {
+  return normalizedModelId(model) === GPT_IMAGE_2_PRO_MODEL;
 }
 
-function imageGenerationSize(request: GenerateRequest) {
-  if (isGptImage2Model(request.model) && request.aspectRatio) {
-    return SIZE_BY_RATIO[request.aspectRatio] || SIZE_BY_RATIO["1:1"];
-  }
-  return request.size || request.aspectRatio || "auto";
+function isGemini3ProImageModel(model = "") {
+  return normalizedModelId(model) === GEMINI_3_PRO_IMAGE_MODEL;
 }
 
 function dataUrlToGeminiPart(image: ReferenceImage) {

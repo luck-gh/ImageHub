@@ -21,15 +21,15 @@ Admin defaults: `admin` / `admin123456` at `http://localhost:8877/#admin`. Overr
 
 ## Architecture — the non-obvious parts
 
-**The entire backend lives inside `vite.config.ts`** (~4100 lines). It registers a custom Vite plugin whose `configureServer` middleware implements every `/api/*` route. There is no `server/`, `api/`, or `backend/` directory. When the task involves request logging, admin auth, the upstream proxy, or reference-image temp URLs, edit `vite.config.ts`, not files under `src/`.
+**The entire backend lives inside `vite.config.ts`** (~4200 lines). It registers a custom Vite plugin whose `configureServer` middleware implements every `/api/*` route. There is no `server/`, `api/`, or `backend/` directory. When the task involves request logging, admin auth, the upstream proxy, or reference-image temp URLs, edit `vite.config.ts`, not files under `src/`.
 
 Server-side route groups:
 - `/api/models`, `/api/images/generate`, `/api/temp-reference/:id` — core generation proxy.
 - `/api/admin/*` (login, logout, change-password, stats, requests, me) — admin dashboard.
-- `/api/square/*` (feed, quota, recommend, like, admin/overview, admin/export) — community gallery. Data persisted to `.data/square-store.json`.
+- `/api/square/*` (feed, quota, recommend, like, image/:id, admin/overview, admin/export) — community gallery. Data persisted to `.data/square-store.json`. Feed/quota GET endpoints authenticate via `x-imagehub-api-key` header (not query params). Thumbnails are served as binary from `/api/square/image/:id` with long cache headers — the feed response returns `thumbnailUrl` (not inline base64).
 - `/api/agent/analyze` — Agent Mode A intent classification (single_image, multi_image_batch, brochure_project, page_refine).
 
-**The entire frontend lives inside `src/App.tsx`** (~9500 lines). One monolithic component handles home, studio, square, and admin views via a `mainPage` state switch (`"home" | "studio" | "square" | "admin"`) — there is no router, no Redux/Zustand, no React Context for app state. State is `useState` + `useRef` (the generation queue uses `pendingQueueRef` deliberately to avoid re-renders mid-pump). Styles are in `src/styles.css` (~6800 lines) as plain CSS with custom properties.
+**The entire frontend lives inside `src/App.tsx`** (~9700 lines). One monolithic component handles home, studio, square, and admin views via a `mainPage` state switch (`"home" | "studio" | "square" | "admin"`) — there is no router, no Redux/Zustand, no React Context for app state. State is `useState` + `useRef` (the generation queue uses `pendingQueueRef` deliberately to avoid re-renders mid-pump). Styles are in `src/styles.css` (~7200 lines) as plain CSS with custom properties.
 
 **Square (community gallery):** users can recommend generated images to a shared feed. Browse by latest/hot/top; daily quotas (10 recommends, 10 likes). Admin has overview + CSV/JSON export. Square state is server-persisted in `.data/square-store.json`, not IndexedDB.
 

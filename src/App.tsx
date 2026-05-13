@@ -656,6 +656,7 @@ const DEFAULT_API_URL = ALLOWED_API_ENDPOINTS[0].value;
 const DEFAULT_PROTOCOL: ImageProtocol = "custom-openai";
 const DEFAULT_IMAGE_RESOLUTION: ImageResolution = "1K";
 const GPT_IMAGE_2_MODEL = "gpt-image-2";
+const GPT_IMAGE_2_PRO_MODEL = "gpt-image-2-pro";
 const GPT_IMAGE_2_FAMILY_MODEL = "gpt-5.4-image-2";
 const GEMINI_3_PRO_IMAGE_MODEL = "gemini-3-pro-image-preview";
 const PRIMARY_IMAGE_MODELS = [GPT_IMAGE_2_MODEL, GEMINI_3_PRO_IMAGE_MODEL] as const;
@@ -681,6 +682,7 @@ const ASPECT_RATIOS = [
 
 const ALL_ASPECT_RATIOS = ASPECT_RATIOS.map((ratio) => ratio.value);
 const GPT_IMAGE_SUPPORTED_ASPECT_RATIOS = ["1:1", "2:3", "3:2"] as const;
+const GPT_IMAGE_2_PRO_SUPPORTED_ASPECT_RATIOS = ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"] as const;
 const GEMINI_3_PRO_SUPPORTED_ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"] as const;
 
 const IMAGEN_ASPECT_RATIOS = ["1:1", "3:4", "4:3", "9:16", "16:9"];
@@ -743,7 +745,7 @@ const PROTOCOLS: Array<{
     shortLabel: "兼容协议",
     description: "适合第三方中转或自建 OpenAI 风格图片接口",
     defaultBaseUrl: DEFAULT_API_URL,
-    defaultModels: [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
+    defaultModels: [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_PRO_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
     supportedAspectRatios: ALL_ASPECT_RATIOS,
     supportsReferenceImages: true,
     supportsNegativePrompt: true,
@@ -756,7 +758,7 @@ const PROTOCOLS: Array<{
     shortLabel: "OpenAI",
     description: "OpenAI 风格 Images API，宽高比会转换为 size 参数",
     defaultBaseUrl: DEFAULT_API_URL,
-    defaultModels: [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
+    defaultModels: [GPT_IMAGE_2_MODEL, GPT_IMAGE_2_PRO_MODEL, GPT_IMAGE_2_FAMILY_MODEL],
     supportedAspectRatios: OPENAI_ASPECT_RATIOS,
     supportsReferenceImages: true,
     supportsNegativePrompt: true,
@@ -1637,6 +1639,10 @@ function isGptImage2Model(model = "") {
   return normalized === GPT_IMAGE_2_MODEL || normalized === GPT_IMAGE_2_FAMILY_MODEL || normalized.includes("image-2");
 }
 
+function isGptImage2ProModel(model = "") {
+  return normalizedImageModelId(model) === GPT_IMAGE_2_PRO_MODEL;
+}
+
 function isGemini3ProImageModel(model = "") {
   return normalizedImageModelId(model) === GEMINI_3_PRO_IMAGE_MODEL;
 }
@@ -1658,12 +1664,13 @@ function protocolMatchesImageModel(protocol: ImageProtocol, model = "") {
 
 function imageModelLaneLabel(model: string) {
   if (isGemini3ProImageModel(model)) return "Gemini 原生接口";
+  if (isGptImage2ProModel(model)) return "GPT Image 2 Pro 接口";
   if (isGptImage2Model(model)) return "GPT Image 2 接口";
   return "图片模型";
 }
 
 function usesOfficialGptImageSizing(protocol: ImageProtocol, model = "") {
-  return isGptImage2Model(model) && (
+  return isGptImage2Model(model) && !isGptImage2ProModel(model) && (
     protocol === "custom-openai"
     || protocol === "openai-images"
     || protocol === "openai-responses"
@@ -1673,6 +1680,9 @@ function usesOfficialGptImageSizing(protocol: ImageProtocol, model = "") {
 function getSupportedAspectRatios(protocol: ImageProtocol, model = "") {
   if (isGemini3ProImageModel(model) && protocol === "gemini-native") {
     return [...GEMINI_3_PRO_SUPPORTED_ASPECT_RATIOS];
+  }
+  if (isGptImage2ProModel(model)) {
+    return [...GPT_IMAGE_2_PRO_SUPPORTED_ASPECT_RATIOS];
   }
   if (usesOfficialGptImageSizing(protocol, model)) {
     return [...GPT_IMAGE_SUPPORTED_ASPECT_RATIOS];
@@ -2614,8 +2624,9 @@ function isAllowedImageModel(model: string) {
 function imageModelPriority(model: string) {
   const normalized = normalizedImageModelId(model);
   if (normalized === GPT_IMAGE_2_MODEL) return 0;
-  if (normalized === GPT_IMAGE_2_FAMILY_MODEL) return 1;
-  if (normalized === GEMINI_3_PRO_IMAGE_MODEL) return 2;
+  if (normalized === GPT_IMAGE_2_PRO_MODEL) return 1;
+  if (normalized === GPT_IMAGE_2_FAMILY_MODEL) return 2;
+  if (normalized === GEMINI_3_PRO_IMAGE_MODEL) return 3;
   return 10;
 }
 
@@ -5738,6 +5749,20 @@ export default function App() {
     setModels(nextModels);
     setSelectedModel(nextModel);
     setModelFilter("");
+    setParams((current) => {
+      const nextSupportedRatios = getSupportedAspectRatios(nextProtocol, nextModel);
+      const nextAspectRatio = nextSupportedRatios.includes(current.aspectRatio)
+        ? current.aspectRatio
+        : nextSupportedRatios[0] || "1:1";
+      const canScale = isGptImage2ProModel(nextModel) || !usesOfficialGptImageSizing(nextProtocol, nextModel);
+      const nextResolution = canScale ? current.resolution : "1K" as ImageResolution;
+      return {
+        ...current,
+        aspectRatio: nextAspectRatio,
+        resolution: nextResolution,
+        size: resolveRequestSize(nextAspectRatio, nextResolution, nextProtocol, nextModel),
+      };
+    });
   }
 
   function downloadCurrent(job: Job | HistoryRecord) {
@@ -7302,7 +7327,7 @@ export default function App() {
           <div className="ratio-preview">
             <strong>{selectedResolution}</strong>
             <span>{selectedResolutionDefinition.hint}</span>
-            <small>{isOfficialGptImageSizeMode ? "GPT Image 2 当前仅使用官方固定尺寸，不额外放大" : isGemini3ProImageModel(selectedModel) ? "Gemini 3 Pro 会以 imageSize 传递 1K/2K/4K" : "尺寸会随宽高比自动换算"}</small>
+            <small>{isOfficialGptImageSizeMode ? "GPT Image 2 仅使用官方固定尺寸，选择 Pro 模型可用 2K/4K" : isGemini3ProImageModel(selectedModel) ? "Gemini 3 Pro 会以 imageSize 传递 1K/2K/4K" : isGptImage2ProModel(selectedModel) ? "Pro 模型支持 2K/4K 高分辨率输出" : "尺寸会随宽高比自动换算"}</small>
           </div>
           <label>
             <span>质量</span>
